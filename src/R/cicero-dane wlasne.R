@@ -1,4 +1,5 @@
 library(cicero)
+
 install.packages("hdf5r")
 h5ls("/home/julia/Desktop/uni/enhancer-promoter-interactions/muszka/filtered_feature_bc_matrix.h5")
 install.packages("remotes")
@@ -23,6 +24,11 @@ result <- detectGenes(result)
 
 traceh5data = load_cellranger_data_h5(folders='/home/julia/Desktop/uni/enhancer-promoter-interactions/muszka')
 mydata <- h5read("/home/julia/Desktop/uni/enhancer-promoter-interactions/muszka/filtered_feature_bc_matrix.h5", "/matrix")
+
+library(igraph)
+set.seed(736)
+
+
 library(readr)
 start_data <- read.table(gzfile("/home/julia/Desktop/strony/muszka/GSM6614577_fragments.tsv.gz"), nrows=10000)   
 
@@ -48,6 +54,7 @@ gc()
 
 chrom_sizes <- read.table(file("/home/julia/Desktop/strony/muszka/dmel-all-chromosome-r6.36.chrom.sizes")) 
 sample_genome <- subset(chrom_sizes, V1=='2L')
+
 dist_p = estimate_distance_parameter(cicero_cds, genomic_coords = sample_genome, s=0.85, distance_constraint = 50000, window = 100000)
 #conns <- run_cicero(cicero_cds, genomic_coords=sample_genome, sample_num=5, max_elements=1000) # Takes a few minutes to run
 head(conns)
@@ -96,3 +103,7 @@ cds <- reduceDimension(cds, max_components = 2, num_dim=6,
 tsne_coords <- t(reducedDimA(cds))
 row.names(tsne_coords) <- row.names(pData(cds))
 cicero_cds <- make_cicero_cds(cds, reduced_coordinates = tsne_coords)
+
+dist_p = estimate_distance_parameter(cicero_cds, genomic_coords = sample_genome, max_elements = 1000)
+#conns <- run_cicero(cicero_cds, genomic_coords=sample_genome, sample_num=5, max_elements=1000) # Takes a few minutes to run
+head(conns)
