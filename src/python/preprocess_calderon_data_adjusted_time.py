@@ -1,4 +1,4 @@
-# A script to prepare the Calderon ATAC-seq data with adjusted time windows. 
+# The script to prepare the Calderon ATAC-seq data with adjusted time windows. 
 # It uses time windows from the NNv1_time.new column in the metadata file named 'atac.meta.rds'.
 # The script reads the peak matrix files, filters the cells that belong to the time window, 
 # and saves the new peak matrix files in the 'data/muszka/calderon_data/new_time/NN' folder.
