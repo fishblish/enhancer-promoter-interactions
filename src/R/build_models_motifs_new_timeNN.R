@@ -137,7 +137,6 @@ str(features)
 # omit other species motifs
 features = features[,!grepl('other_species', colnames(features))]
 
-
 # build models
 library(mlr3)
 library(mlr3learners)
@@ -149,73 +148,123 @@ library(precrec)
 library(gridExtra)
 library(stringr)
 
-plots = list()
+
 colnames(features) = make.names(colnames(features))
 features_to_use_dict = list()
 
-for (i in 1:nrow(loops_data)){
-    if (grepl(".+_.+\\.+.+h_.+", rownames(loops_data)[i])){
-        time_window = str_extract(rownames(loops_data)[i], "\\d+\\.\\d+h")
-        print(time_window)
-        if (time_window=='6.8h'){
-            time_window = '06.08'
-            prev_time_window = '04.06'
-            prev_prev_time_window = '02.04'
+results_to_compare = data.frame()
+
+feature_combinations = list()
+feature_combinations[['2prev']] = "features[,grepl(paste0(time_window,'$'), colnames(features)) | grepl(paste0(prev_time_window,'$'), colnames(features)) | grepl('dist$', colnames(features)) ]"
+feature_combinations[['2diff']] = "features[,grepl(paste0(time_window,'$'), colnames(features)) | grepl(paste0(prev_time_window,'_diff$'), colnames(features)) | grepl('dist$', colnames(features)) ]"
+feature_combinations[['3prevprev']] = "features[,grepl(paste0(time_window,'$'), colnames(features)) | grepl(paste0(prev_time_window,'$'), colnames(features)) | grepl(paste0(prev_prev_time_window,'$'), colnames(features)) | grepl('dist$', colnames(features)) ]"
+feature_combinations[['3']] = "features[,grepl(paste0(time_window,'$'), colnames(features)) | grepl(paste0(time_window,'_diff$'), colnames(features)) | grepl(paste0(prev_time_window,'$'), colnames(features)) | grepl('dist$', colnames(features)) ]"
+feature_combinations[['4']] = "features[,grepl(paste0(time_window,'$'), colnames(features)) | grepl(paste0(time_window,'_diff$'), colnames(features)) | grepl(paste0(prev_time_window,'$'), colnames(features)) | grepl(paste0(prev_time_window,'_diff$'), colnames(features)) | grepl('dist$', colnames(features)) ]"
+feature_combinations[['5']] = "features[,grepl(paste0(time_window,'$'), colnames(features)) | grepl(paste0(time_window,'_diff$'), colnames(features)) | grepl(paste0(prev_time_window,'$'), colnames(features)) | grepl(paste0(prev_time_window,'_diff$'), colnames(features)) | grepl(paste0(prev_prev_time_window,'$'), colnames(features)) | grepl('dist$', colnames(features)) ]"
+feature_combinations[['6']] = "features[,grepl(paste0(time_window,'$'), colnames(features)) | grepl(paste0(time_window,'_diff$'), colnames(features)) | grepl(paste0(prev_time_window,'$'), colnames(features)) | grepl(paste0(prev_time_window,'_diff$'), colnames(features)) | grepl(paste0(prev_prev_time_window,'$'), colnames(features)) | grepl(paste0(prev_prev_time_window,'_diff$'), colnames(features)) | grepl('dist$', colnames(features)) ]"
+feature_combinations[['all']] = "features"
+
+for (comb in names(feature_combinations)){
+    plots = list()
+    print(comb)
+    for (i in 1:nrow(loops_data)){
+        if (grepl(".+_.+\\.+.+h_.+", rownames(loops_data)[i])){
+            time_window = str_extract(rownames(loops_data)[i], "\\d+\\.\\d+h")
+            print(time_window)
+            if (time_window=='6.8h'){
+                time_window = '06.08'
+                prev_time_window = '04.06'
+                prev_prev_time_window = '02.04'
+            }
+            if (time_window=='10.12h'){
+                time_window = '10.12'
+                prev_time_window = '08.10'
+                prev_prev_time_window = '06.08'
+            }
+            if (time_window=='14.16h'){
+                time_window = '14.16'
+                prev_time_window = '12.14'
+                prev_prev_time_window = '10.12'
+            }
+            if (time_window=='16.18h'){
+                time_window = '16.18'
+                prev_time_window = '14.16'
+                prev_prev_time_window = '12.14'
+            }
+            print(time_window)
+            features_to_use = eval(parse(text = feature_combinations[[comb]]))
+            #features_to_use_dict[[time_window]] = features_to_use
         }
-        if (time_window=='10.12h'){
-            time_window = '10.12'
-            prev_time_window = '08.10'
-            prev_prev_time_window = '06.08'
+        else{
+            next
         }
-        if (time_window=='14.16h'){
-            time_window = '14.16'
-            prev_time_window = '12.14'
-            prev_prev_time_window = '10.12'
-        }
-        if (time_window=='16.18h'){
-            time_window = '16.18'
-            prev_time_window = '14.16'
-            prev_prev_time_window = '12.14'
-        }
-        print(time_window)
-        features_to_use = features[,grepl(paste0(time_window,'$'), colnames(features)) | grepl("dist", colnames(features)) | grepl(paste0(time_window,"_diff$"), colnames(features)) | grepl(paste0(prev_time_window,'$'), colnames(features)) | grepl(paste0(prev_time_window,"_diff$"), colnames(features)) ]
-        features_to_use_dict[[time_window]] = features_to_use
+        loops_data_row = loops_data[i,]
+        loops_data_row = loops_data_row[!is.na(loops_data_row)]
+        loops_data_row = loops_data_row[intersect(names(loops_data_row), rownames(features_to_use))]
+        features_to_use = features_to_use[match(names(loops_data_row), rownames(features_to_use)),]
+        features_to_use = features_to_use[match(names(loops_data_row), rownames(features_to_use)),]
+        features_to_use = as.data.frame(features_to_use)
+        loops_data_row = as.factor(loops_data_row)
+        features_to_use$target <- loops_data_row
+
+        task <- TaskClassif$new(id = "task", backend = features_to_use, target = "target")
+
+        learners <- list(
+        lrn("classif.xgboost", predict_type = "prob"),
+        lrn("classif.ranger", predict_type = "prob"), #random forest
+        lrn("classif.svm", predict_type = "prob")
+        )
+        resampling <- rsmp("cv", folds = 5)
+        bmr <- benchmark(benchmark_grid(task, learners, resampling))
+
+
+        auc_scores = paste(round(bmr$aggregate(msr("classif.auc"))[['classif.auc']],3), collapse = ", ")
+
+        p1 <- autoplot(bmr, type = "roc", measure = msr("classif.auc")) +
+        ggtitle(paste(rownames(loops_data)[i],"\nAUC ROC score ", auc_scores)) +
+        theme(plot.title = element_text(hjust = 0.5, size = 14))
+
+        plots[[length(plots)+1]] = p1
+        results_to_compare[comb, rownames(loops_data)[i]]=round(bmr$aggregate(msr("classif.auc"))[['classif.auc']],3)[2]
     }
-    else{
-        next
+    
+    p=grid.arrange(grobs = plots, ncol = 2)
+
+    ggsave(filename = paste0("results/calderon/motifs/with_dist/mlr3_models_benchmark_omitted_other_species_NN_9windows_different_time_",comb,"_with_dist.pdf"), plot = p, width = 10, height = 20, dpi = 300)
     }
-    loops_data_row = loops_data[i,]
-    loops_data_row = loops_data_row[!is.na(loops_data_row)]
-    loops_data_row = loops_data_row[intersect(names(loops_data_row), rownames(features_to_use))]
-    features_to_use = features_to_use[match(names(loops_data_row), rownames(features_to_use)),]
-    features_to_use = features_to_use[match(names(loops_data_row), rownames(features_to_use)),]
-    features_to_use = as.data.frame(features_to_use)
-    loops_data_row = as.factor(loops_data_row)
-    features_to_use$target <- loops_data_row
+# module with concatenated predicted vectors among time windows
+# one model per tissue
+saveRDS(results_to_compare, paste0(getwd(),'/results/calderon/motifs/with_dist/results_to_compare_omitted_other_species_NN_9windows_with_dist.rds'))
+results_to_compare = readRDS(paste0(getwd(),'/results/calderon/motifs/with_dist/results_to_compare_omitted_other_species_NN_9windows_with_dist.rds'))
+# plot results comparison as bar plot
+transposed_data <- t(results_to_compare)
+transposed_data <- data.frame(Category = rownames(transposed_data), transposed_data)
+library(reshape2)
+melted_data <- melt(transposed_data, id.vars = "Category")
 
-    task <- TaskClassif$new(id = "task", backend = features_to_use, target = "target")
+# Create the barplot
+library(ggplot2)
+colors <- c("X2prev" = rgb(1, 0, 0),  # red
+            "X2diff" = rgb(0, 0.5, 0),  # green
+            "X3prevprev" = rgb(0, 0, 1),  # blue
+            "X3" = rgb(0.75, 0.75, 0),  # yellow
+            "X4" = rgb(0.75, 0, 0.75),  # magenta
+            "X5" = rgb(0, 0.75, 0.75),  # cyan
+            "X6" = rgb(0.75, 0.75, 0.75),  # grey
+            "all" = rgb(0, 0, 0))  # black
 
-    learners <- list(
-    lrn("classif.xgboost", predict_type = "prob"),
-    lrn("classif.ranger", predict_type = "prob"), #random forest
-    lrn("classif.svm", predict_type = "prob")
-    )
-    resampling <- rsmp("cv", folds = 5)
+# Create the barplot
+p <- ggplot(melted_data, aes(x = Category, y = value, fill = variable)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.8) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  ggtitle("Comparison of AUC ROC scores for different feature combinations, models with distance") +
+  labs(x = "Category", y = "Value", fill = "Group") +
+  coord_cartesian(ylim = c(0.65, 0.85)) +
+  scale_fill_manual(values = colors)
 
-    bmr <- benchmark(benchmark_grid(task, learners, resampling))
+ggsave(filename = paste0("results/calderon/motifs/with_dist/plotted_results_to_compare_omitted_other_species_NN_9windows_with_dist.pdf"), plot = p, width = 15, height = 10, dpi = 300)
 
-
-    auc_scores = paste(round(bmr$aggregate(msr("classif.auc"))[['classif.auc']],3), collapse = ", ")
-
-    p1 <- autoplot(bmr, type = "roc", measure = msr("classif.auc")) +
-    ggtitle(paste(rownames(loops_data)[i],"\nAUC ROC score ", auc_scores)) +
-    theme(plot.title = element_text(hjust = 0.5, size = 14))
-
-    plots[[length(plots)+1]] = p1
-}
-p=grid.arrange(grobs = plots, ncol = 2)
-
-ggsave(filename = "results/calderon/motifs/mlr3_models_benchmark_omitted_other_species_NN_9windows_different_time_features4.pdf", plot = p, width = 10, height = 20, dpi = 300)
 
 # module with concatenated predicted vectors among time windows
 # one model per tissue
@@ -223,6 +272,7 @@ ggsave(filename = "results/calderon/motifs/mlr3_models_benchmark_omitted_other_s
 neuroblasts = c('Dmel_6.8h_Neuroblasts','Dmel_10.12h_Neuroblasts','Dmel_14.16h_Neuroblasts')
 neurons = c('Dmel_6.8h_Neurons','Dmel_10.12h_Neurons','Dmel_14.16h_Neurons')
 glia = c('Dmel_6.8h_Glia','Dmel_10.12h_Glia','Dmel_14.16h_Glia')
+tissue_names = c('neuroblast', 'neuron', 'glia')
 
 neuroblast_data = loops_data[neuroblasts,]
 neuron_data = loops_data[neurons,]
@@ -246,55 +296,116 @@ for (name in names(features_to_use_dict)){
     rownames(features_to_use_dict[[name]]) = paste(name, rownames(features_to_use_dict[[name]]), sep="_")
 }
 
-
-plots = list()
-tissue_names = c('neuroblast', 'neuron', 'glia')
-for (i in 1:3){
-    loops_data_row = list(neuroblast_vector, neuron_vector, glia_vector)[[i]]
-    features_to_use = rbind(features_to_use_dict[['06.08']], features_to_use_dict[['10.12']], features_to_use_dict[['14.16']])
-    loops_data_row = loops_data_row[!is.na(loops_data_row)]
-    loops_data_row = loops_data_row[intersect(names(loops_data_row), rownames(features_to_use))]
-    features_to_use = features_to_use[match(names(loops_data_row), rownames(features_to_use)),]
-    features_to_use = features_to_use[match(names(loops_data_row), rownames(features_to_use)),]
-    features_to_use = as.data.frame(features_to_use)
-    loops_data_row = as.factor(loops_data_row)
-    features_to_use$target <- loops_data_row
-
-    task <- TaskClassif$new(id = "task", backend = features_to_use, target = "target")
-
-    learners <- list(
-    lrn("classif.xgboost", predict_type = "prob"),
-    lrn("classif.ranger", predict_type = "prob"), #random forest
-    lrn("classif.svm", predict_type = "prob")
-    )
-    resampling <- rsmp("cv", folds = 5)
-
-    bmr <- benchmark(benchmark_grid(task, learners, resampling))
-
-
-    auc_scores = paste(round(bmr$aggregate(msr("classif.auc"))[['classif.auc']],3), collapse = ", ")
-
-    p1 <- autoplot(bmr, type = "roc", measure = msr("classif.auc")) +
-    ggtitle(paste(tissue_names[i],"\nAUC ROC score ", auc_scores)) +
-    theme(plot.title = element_text(hjust = 0.5, size = 14))
-
-    plots[[length(plots)+1]] = p1
+features_to_use_dict = list()
+for (comb in names(feature_combinations)){
+    plots = list()
+    print(comb)
+    for (i in 1:nrow(loops_data)){
+        if (grepl(".+_.+\\.+.+h_.+", rownames(loops_data)[i])){
+            time_window = str_extract(rownames(loops_data)[i], "\\d+\\.\\d+h")
+            print(time_window)
+            if (time_window=='6.8h'){
+                time_window = '06.08'
+                prev_time_window = '04.06'
+                prev_prev_time_window = '02.04'
+            }
+            if (time_window=='10.12h'){
+                time_window = '10.12'
+                prev_time_window = '08.10'
+                prev_prev_time_window = '06.08'
+            }
+            if (time_window=='14.16h'){
+                time_window = '14.16'
+                prev_time_window = '12.14'
+                prev_prev_time_window = '10.12'
+            }
+            if (time_window=='16.18h'){
+                time_window = '16.18'
+                prev_time_window = '14.16'
+                prev_prev_time_window = '12.14'
+            }
+            print(time_window)
+            features_to_use = eval(parse(text = feature_combinations[[comb]]))
+            features_to_use_dict[[comb]][[time_window]] = features_to_use
+            rownames(features_to_use_dict[[comb]][[time_window]]) = paste(time_window, rownames(features_to_use_dict[[comb]][[time_window]]), sep="_")
+        }
+        else{
+            next
+        }
+    }
 }
-p=grid.arrange(grobs = plots, ncol = 1)
 
-ggsave(filename = "results/calderon/motifs/mlr3_models_benchmark_omitted_other_species_NN_9windows_different_time_features4_per_tissue.pdf", plot = p, width = 10, height = 20, dpi = 300)
+results_to_compare_per_tissue = data.frame()
+for (comb in names(feature_combinations)){
+    plots = list()
+    print(comb)
+    for (i in 1:3){
+        print(tissue_names[i])
+        loops_data_row = list(neuroblast_vector, neuron_vector, glia_vector)[[i]]
+        features_to_use = rbind(features_to_use_dict[[comb]][['06.08']], features_to_use_dict[[comb]][['10.12']], features_to_use_dict[[comb]][['14.16']])
+        loops_data_row = loops_data_row[!is.na(loops_data_row)]
+        loops_data_row = loops_data_row[intersect(names(loops_data_row), rownames(features_to_use))]
+        features_to_use = features_to_use[match(names(loops_data_row), rownames(features_to_use)),]
+        features_to_use = features_to_use[match(names(loops_data_row), rownames(features_to_use)),]
+        features_to_use = as.data.frame(features_to_use)
+        loops_data_row = as.factor(loops_data_row)
+        features_to_use$target <- loops_data_row
 
+        task <- TaskClassif$new(id = "task", backend = features_to_use, target = "target")
+
+        learners <- list(
+        lrn("classif.xgboost", predict_type = "prob"),
+        lrn("classif.ranger", predict_type = "prob"), #random forest
+        lrn("classif.svm", predict_type = "prob")
+        )
+        resampling <- rsmp("cv", folds = 5)
+
+        bmr <- benchmark(benchmark_grid(task, learners, resampling))
+
+
+        auc_scores = paste(round(bmr$aggregate(msr("classif.auc"))[['classif.auc']],3), collapse = ", ")
+
+        p1 <- autoplot(bmr, type = "roc", measure = msr("classif.auc")) +
+        ggtitle(paste(tissue_names[i],"\nAUC ROC score ", auc_scores)) +
+        theme(plot.title = element_text(hjust = 0.5, size = 14))
+
+        plots[[length(plots)+1]] = p1
+        results_to_compare_per_tissue[comb, tissue_names[i]]=round(bmr$aggregate(msr("classif.auc"))[['classif.auc']],3)[2]
+    }
+    p=grid.arrange(grobs = plots, ncol = 1)
+
+    ggsave(filename = paste0("results/calderon/motifs/with_dist/mlr3_models_benchmark_omitted_other_species_NN_9windows_different_time_",comb,"_with_dist_per_tissue.pdf"), plot = p, width = 15, height = 10, dpi = 300)
+}
+
+saveRDS(results_to_compare_per_tissue, paste0(getwd(),'/results/calderon/motifs/with_dist/results_to_compare_per_tissue_omitted_other_species_NN_9windows_with_dist.rds'))
+
+# plot results comparison as bar plot
+transposed_data <- t(results_to_compare_per_tissue)
+transposed_data <- data.frame(Category = rownames(transposed_data), transposed_data)
+melted_data <- melt(transposed_data, id.vars = "Category")
+
+p <- ggplot(melted_data, aes(x = Category, y = value, fill = variable)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.8) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  ggtitle("Comparison of AUC ROC scores for different feature combinations, models with distance, per tissue") +
+  labs(x = "Category", y = "Value", fill = "Group") +
+  coord_cartesian(ylim = c(0.65, 0.85)) +
+  scale_fill_manual(values = colors)
+
+ggsave(filename = paste0("results/calderon/motifs/with_dist/plotted_results_to_compare_per_tissue_omitted_other_species_NN_9windows_with_dist.pdf"), plot = p, width = 10, height = 10, dpi = 300)
 
 
 ## boruta importance heatmaps
 # boruta importance - for set of 4 features
+selected_comb = '4'
 library(Boruta)
 set.seed(111)
 boruta_results = list()
 for (i in 1:3){
     print(i)
     loops_data_row = list(neuroblast_vector, neuron_vector, glia_vector)[[i]]
-    features_to_use = rbind(features_to_use_dict[['06.08']], features_to_use_dict[['10.12']], features_to_use_dict[['14.16']])
+    features_to_use = rbind(features_to_use_dict[[selected_comb]][['06.08']], features_to_use_dict[[selected_comb]][['10.12']], features_to_use_dict[[selected_comb]][['14.16']])
     loops_data_row = loops_data_row[!is.na(loops_data_row)]
     loops_data_row = loops_data_row[intersect(names(loops_data_row), rownames(features_to_use))]
     features_to_use = features_to_use[match(names(loops_data_row), rownames(features_to_use)),]
@@ -312,9 +423,9 @@ for (i in 1:3){
 
 # and for one model for all tissues 
 loops_data_row = c(neuroblast_vector, neuron_vector, glia_vector)
-features_to_use = rbind(features_to_use_dict[['06.08']], features_to_use_dict[['10.12']], features_to_use_dict[['14.16']],
-                        features_to_use_dict[['06.08']], features_to_use_dict[['10.12']], features_to_use_dict[['14.16']],
-                        features_to_use_dict[['06.08']], features_to_use_dict[['10.12']], features_to_use_dict[['14.16']])
+features_to_use = rbind(features_to_use_dict[[selected_comb]][['06.08']], features_to_use_dict[[selected_comb]][['10.12']], features_to_use_dict[[selected_comb]][['14.16']],
+                        features_to_use_dict[[selected_comb]][['06.08']], features_to_use_dict[[selected_comb]][['10.12']], features_to_use_dict[[selected_comb]][['14.16']],
+                        features_to_use_dict[[selected_comb]][['06.08']], features_to_use_dict[[selected_comb]][['10.12']], features_to_use_dict[[selected_comb]][['14.16']])
 loops_data_row = loops_data_row[!is.na(loops_data_row)]
 loops_data_row = loops_data_row[intersect(names(loops_data_row), rownames(features_to_use))]
 features_to_use = features_to_use[match(names(loops_data_row), rownames(features_to_use)),]
@@ -350,7 +461,7 @@ for (i in 1:4){
 }
 my_palette <- colorRampPalette(c("#f9f8f7","#ADD8E6", "#1ebb1e"))(n = 100) 
 
-pdf("results/calderon/motifs/boruta_heatmap_omitted_other_species_NN_features4.pdf", width = 50, height = 8) 
+pdf("results/calderon/motifs/with_dist/boruta_heatmap_omitted_other_species_NN_features4.pdf", width = 50, height = 8) 
 library(gplots)
 for(i in 1:4) {
   df <- get(paste0("boruta_results_f", i))
