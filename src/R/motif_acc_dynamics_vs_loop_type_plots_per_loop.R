@@ -17,7 +17,7 @@ heatmap_data=readRDS(paste0(getwd(),'/results/calderon/motifs/without_dist/heatm
 important_motifs=colnames(heatmap_data)
 
 plot_combined_list=list()
-for (selected_motif in important_motifs){
+for (selected_motif in important_motifs[1:5]){
   print(selected_motif)
   plot_list=list()
   for (tissue in c('Neurons','Neuroblasts','Glia')){
@@ -34,8 +34,8 @@ for (selected_motif in important_motifs){
     loops_types[['000']] = loops[loops[cols[1]] == 0 & loops[cols[2]] == 0 & loops[cols[3]] == 0, 'loop_id']
     loops_types[['001']] = loops[loops[cols[1]] == 0 & loops[cols[2]] == 0 & loops[cols[3]] == 1, 'loop_id']
     loops_types[['010']] = loops[loops[cols[1]] == 0 & loops[cols[2]] == 1 & loops[cols[3]] == 0, 'loop_id']
-    loops_types[['100']] = loops[loops[cols[1]] == 1 & loops[cols[2]] == 0 & loops[cols[3]] == 0, 'loop_id']
     loops_types[['011']] = loops[loops[cols[1]] == 0 & loops[cols[2]] == 1 & loops[cols[3]] == 1, 'loop_id']
+    loops_types[['100']] = loops[loops[cols[1]] == 1 & loops[cols[2]] == 0 & loops[cols[3]] == 0, 'loop_id']
     loops_types[['101']] = loops[loops[cols[1]] == 1 & loops[cols[2]] == 0 & loops[cols[3]] == 1, 'loop_id']
     loops_types[['110']] = loops[loops[cols[1]] == 1 & loops[cols[2]] == 1 & loops[cols[3]] == 0, 'loop_id']
     loops_types[['111']] = loops[loops[cols[1]] == 1 & loops[cols[2]] == 1 & loops[cols[3]] == 1, 'loop_id']
@@ -97,36 +97,46 @@ for (selected_motif in important_motifs){
       data_to_plot[group]=rowMeans(time_windows[,loops_types[[group]]], na.rm=TRUE)-time_stamp_means
     } 
 
-    #Create line plot
-    data_to_plot_long <- tidyr::pivot_longer(data_to_plot, -time_window, names_to = "group", values_to = "value")
-    data_to_plot_long$time_window <- factor(data_to_plot_long$time_window, levels = data_to_plot$time_window)
-
     custom_colors <- c("#E41A1C", "#377EB8", "#4DAF4A", "#984EA3", 
                    "#FF7F00", "#00CED1", "#A65628", "#F781BF")
 
-    
-    p <- ggplot(data_to_plot_long, aes(x = time_window, y = value, color = group, group = group)) +
-      geom_line() +  
-      theme_bw() +
-      labs(title = paste0("Motif ",selected_motif,", accessibility score differences by loop type for ", tissue,'\n',importance_flag),
-          x = "Time Window",
-          y = "Mean Difference",
-          color = "Group") +
-      theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-      scale_x_discrete(breaks = data_to_plot$time_window[seq(1, nrow(data_to_plot), by = 5)])+
-      scale_color_manual(values = custom_colors)+
-      geom_rect(data = data.frame(xmin = c(6/time_window_size+1,10/time_window_size+1,14/time_window_size+1), xmax = c(8/time_window_size+1,12/time_window_size+1,16/time_window_size+1), ymin = -Inf, ymax = Inf), 
+
+    #generate transparent line for each loop
+    data_to_plot_transparent=time_windows
+    data_to_plot_transparent$time_window=paste0(time_windows$start,'-',time_windows$end)
+    data_to_plot_transparent=data_to_plot_transparent[,!(names(data_to_plot_transparent) %in% c('start', 'end'))]
+    long_transparent_data=tidyr::pivot_longer(data_to_plot_transparent,-c(time_window),names_to='loop', values_to='value')
+    long_transparent_data$time_window <- factor(long_transparent_data$time_window, levels = data_to_plot$time_window)
+
+    i=1
+    for (group in names(loops_types)){
+      selected_color=custom_colors[i]
+      i=i+1
+      long_transparent_data[long_transparent_data$loop %in% loops_types[[group]],'group']=group
+      to_plot = long_transparent_data[long_transparent_data$loop %in% loops_types[[group]] & long_transparent_data$group == group, ]    
+      p <- ggplot(to_plot, aes(x = time_window, y = value, color = group, group = loop)) +
+        geom_line(alpha=0.1, color=selected_color) +  
+        theme_bw() +
+        labs(title = paste0("Motif ",selected_motif,", accessibility score differences by loop type for ", tissue,', group ',group,'\n',importance_flag),
+            x = "Time Window",
+            y = "Mean Difference") +
+        theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+        scale_x_discrete(breaks = data_to_plot$time_window[seq(1, nrow(data_to_plot), by = 5)])+
+        guides(color = guide_legend(override.aes = list(alpha = 1)))+
+        geom_rect(data = data.frame(xmin = c(6/time_window_size+1,10/time_window_size+1,14/time_window_size+1), xmax = c(8/time_window_size+1,12/time_window_size+1,16/time_window_size+1), ymin = -Inf, ymax = Inf), 
                 aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax), 
-                alpha = 0.1, inherit.aes = FALSE)
+                alpha = 0.1, inherit.aes = FALSE)+
+        coord_cartesian(ylim = c(-1, 1))
 
-    plot_list=c(plot_list,list(p))
-  
+      plot_list=c(plot_list,list(p))
 
+    }
+  }
   
-  plot_combined = plot_grid(plotlist = plot_list, ncol = 3)
+  plot_combined = plot_grid(plotlist = plot_list, ncol = 3, byrow = FALSE)
   plot_combined_list=c(plot_combined_list,list(plot_combined))
 }
-pdf('/home/jbartczak/enhancer-promoter-interactions/results/calderon/motifs/motif_accessibility_dynamics/all_important_motif_acc_dynamics_vs_loop_type.pdf', width = 24, height = 7)
+pdf('/home/jbartczak/enhancer-promoter-interactions/results/calderon/motifs/motif_accessibility_dynamics/top5_important_motif_acc_dynamics_vs_loop_type_per_loop.pdf', width = 30, height = 30)
 for (i in 1:length(plot_combined_list)){
   print(plot_combined_list[[i]])
 }
