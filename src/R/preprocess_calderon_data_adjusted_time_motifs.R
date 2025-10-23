@@ -1,14 +1,14 @@
 # The script to prepare the Calderon motif data with adjusted time windows. 
 # It uses time windows from the NNv1_time.new column in the metadata file named 'atac.meta.rds'.
 # The script reads the RDS files with motif activity for each cell, filters the cells that belong to the time window, 
-# and saves the new motif files in the 'data/muszka/calderon_data/motifs/new_time/NN' folder in RDS format.
+# and saves the new motif files in the 'results/calderon/new_time' folder in RDS format.
 
 
 library(Matrix)
 library(R.utils)
 library(plyr)
 
-data_path <- '/home/jbartczak/enhancer-promoter-interactions/data/muszka/calderon_data'
+data_path <- 'data/calderon_data'
 print(data_path)
 
 annot <- readRDS(file.path(data_path, 'atac_meta.rds'))
@@ -33,7 +33,7 @@ for (window in c('18-20')) {
   }
   
   new_matrix <- do.call(cbind, new_matrix_list)
-  saveRDS(new_matrix, file = file.path(data_path, paste0('motifs/new_time/NN/GSE190130_', window, '_new_timeNN_matrix_motifs.rds')))
+  saveRDS(new_matrix, file = file.path('results/calderon/new_time', paste0('hrs', window, '_NNv1_time_matrix_motifs.rds')))
 
 
 }
