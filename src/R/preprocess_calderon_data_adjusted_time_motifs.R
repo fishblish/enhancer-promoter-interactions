@@ -21,19 +21,20 @@ for (window in time_windows) {
   cells <- annot$cell[annot$NNv1_time.new == window]
   files <- unique(annot$sample[annot$NNv1_time.new == window])
   new_matrix_list <- list()
-  cells_to_save <- list()
   
   for (file in files) {
     print(file)
     file_name <- paste0(file, '_motif_activity')
     mat <- readRDS(file.path(data_path, 'motifs', paste0(file_name, '.rds')))
     mat <- mat[, colnames(mat) %in% cells, drop = FALSE]
-    cells_to_save <- c(cells_to_save, colnames(mat))
-    new_matrix_list[[file]] <- as(mat, "CsparseMatrix")
+    new_matrix_list[[file]] <- mat
   }
   
   new_matrix <- do.call(cbind, new_matrix_list)
+  stopifnot(setequal(cells, colnames(new_matrix)))
   saveRDS(new_matrix, file = file.path('results/calderon/new_time', paste0('hrs', window, '_NNv1_time_matrix_motifs.rds')))
+  write.table(new_matrix, file = gzfile(file.path('results/calderon/new_time', paste0('hrs', window, '_NNv1_time_matrix_motifs.tsv.gz'))),
+    row.names = TRUE, col.names = NA, sep = "\t", quote = FALSE)
 
 
 }
