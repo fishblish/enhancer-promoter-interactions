@@ -16,7 +16,7 @@ annot <- readRDS(file.path(data_path, 'atac_meta.rds'))
 time_windows <- unique(annot$NNv1_time.new)
 time_windows <- sort(time_windows)
 
-for (window in c('18-20')) {
+for (window in time_windows) {
   print(window)
   cells <- annot$cell[annot$NNv1_time.new == window]
   files <- unique(annot$sample[annot$NNv1_time.new == window])
@@ -27,7 +27,7 @@ for (window in c('18-20')) {
     print(file)
     file_name <- paste0(file, '_motif_activity')
     mat <- readRDS(file.path(data_path, 'motifs', paste0(file_name, '.rds')))
-    mat <- mat[, colnames(mat) %in% cells]
+    mat <- mat[, colnames(mat) %in% cells, drop = FALSE]
     cells_to_save <- c(cells_to_save, colnames(mat))
     new_matrix_list[[file]] <- as(mat, "CsparseMatrix")
   }
